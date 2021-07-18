@@ -1,4 +1,3 @@
-// Written completely by Pranksterria
 #include <Windows.h>
 #include <thread>
 #include <vector>
@@ -21,7 +20,7 @@ setgravity_typedef setgravity = (setgravity_typedef)(x(0x0098B5D0));
 using setspeed_typedef = void(__thiscall*)(int humanoid, float newspeed);
 setspeed_typedef setspeed = (setspeed_typedef)(x(0xC0F050));
 
-uintptr_t pointerwalk(uintptr_t base, std::vector<uintptr_t> addys)
+uintptr_t pointerwalk(uintptr_t base, std::vector<uintptr_t>&& addys)
 {
 	uintptr_t ret = base;
 	for (int i = 0; i < addys.size(); ++i) {
@@ -44,6 +43,23 @@ std::vector<std::string> split(std::string& str)
 	return myvector;
 }
 
+uintptr_t findfirstchild(uintptr_t instance, std::string childname)
+{
+	uintptr_t childinfo = *reinterpret_cast<uintptr_t*>(instance + 0x30);
+	uintptr_t childstart = *reinterpret_cast<uintptr_t*>(childinfo + 0xC);
+	uintptr_t childend = *reinterpret_cast<uintptr_t*>(childinfo + 0x10);
+	for (int i = childstart; i < childend; i += 8) {
+		uintptr_t instance = *reinterpret_cast<uintptr_t*>(i);
+		std::string* name = *reinterpret_cast<std::string * *>(instance + 0x28);
+		if (!strcmp(name->c_str(), childname.c_str())) {
+			printf_s("found: %s\n", name->c_str());
+			return instance;
+		}
+	}
+	std::cout << "no found!\n";
+	return 0;
+}
+
 void main() {
 	DWORD old;
 	AllocConsole();
@@ -55,11 +71,10 @@ void main() {
 	int a[2]{ 0 };
 	r_getdatamodel(r_getdatamodel2(), a);
 	uintptr_t datamodel = a[0] + 0xC;
-	uintptr_t workspace = pointerwalk(datamodel, { 0x30, 0xC, 0 });
-	uintptr_t localplayer = pointerwalk(datamodel, { 0x30, 0xC, 0x60, 0x128 }); // character offset = 0x7C, humanoid = 0x30, 0xC, 0x78
-	uintptr_t humanoid = pointerwalk(localplayer, { 0x7C, 0x30, 0xC, 0x78 });
-	std::cout << "Welcome " << *reinterpret_cast<const char**>(localplayer + 0x28) << std::endl;
-	std::cout << *reinterpret_cast<const char**>(humanoid + 0x28) << std::endl;
+	uintptr_t workspace = findfirstchild(datamodel, "Workspace");
+	uintptr_t localplayer = *reinterpret_cast<uintptr_t*>(findfirstchild(datamodel, "Players") + 0x128);
+	uintptr_t humanoid = findfirstchild(*reinterpret_cast<uintptr_t*>(localplayer + 0x7C), "Humanoid");
+	std::cout << "Welcome " << (*reinterpret_cast<std::string**>(localplayer + 0x28))->c_str() << std::endl;
 	printf_s("datamodel: 0x%08X\n", datamodel);
 	std::string store;
 	while (std::getline(std::cin, store)) {
@@ -81,7 +96,7 @@ void main() {
 			else if (!strcmp(args[0].c_str(), "speed")) {
 				if (args.size() == 2) {
 					try {
-						humanoid = pointerwalk(localplayer, { 0x7C, 0x30, 0xC, 0x78 });
+						humanoid = findfirstchild(*reinterpret_cast<uintptr_t*>(localplayer + 0x7C), "Humanoid");
 						setspeed(humanoid, std::stof(args[1]));
 					}
 					catch (std::exception e) {
@@ -115,19 +130,19 @@ void main() {
 	**(float**)(workspace + 0x3B8) = *(float*)(workspace + 0x3B8) + num;
 */
 
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+BOOL APIENTRY DllMain(HMODULE hModule,
+	DWORD  ul_reason_for_call,
+	LPVOID lpReserved
+)
 {
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
+	switch (ul_reason_for_call)
+	{
+	case DLL_PROCESS_ATTACH:
 		std::thread(main).detach();
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-    case DLL_PROCESS_DETACH:
-        break;
-    }
-    return TRUE;
+	case DLL_THREAD_ATTACH:
+	case DLL_THREAD_DETACH:
+	case DLL_PROCESS_DETACH:
+		break;
+	}
+	return TRUE;
 }
